@@ -17,7 +17,7 @@ import {
   removeEntry as removeClaudeEntry,
 } from "../core/archive/claude-meta/index.ts";
 import { generateDesktopProfile } from "../core/archive/generate/index.ts";
-import { claudePaths } from "../core/archive/paths/index.ts";
+import { claudePaths, harborPaths } from "../core/archive/paths/index.ts";
 import { scan } from "../core/check/index.ts";
 
 function makeHome(): string {
@@ -48,7 +48,7 @@ test("情形①：Claude 条目消失 → 自动删本地 sidecar（含清悬空
     assert.equal(result.actions.length, 1);
     assert.equal(result.actions[0]?.kind, "removed");
     assert.match(result.actions[0]?.message ?? "", /将被删/);
-    assert.equal(existsSync(join(home, ".claudeharbor", "profiles", `${created.id}.json`)), false);
+    assert.equal(existsSync(join(harborPaths(home).profilesDir, `${created.id}.json`)), false);
     assert.equal(localMeta({ home }).entries.length, 0);
     assert.equal(localMeta({ home }).appliedId, null, "悬空镜像应被清除");
     assert.equal(existsSync(join(claudeDir(home), `${created.id}.json`)), false);

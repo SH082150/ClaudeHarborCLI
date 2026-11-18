@@ -13,7 +13,6 @@
 
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -24,10 +23,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Stats } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { atomicWriteJson, readJson, SECRET_MODE } from "../../archive/fs/index.ts";
+import { applyFileMode, atomicWriteJson, readJson, SECRET_MODE } from "../../archive/fs/index.ts";
+import { resolveHome } from "../../platform/index.ts";
 import { ledgerDir, listOfficialLedgerFiles, metaFile, officialLedgerRoot } from "../paths/index.ts";
 import { KNOWN_LEDGER_VERSION } from "../types/index.ts";
 import type { LedgerFileCursor, LedgerRecord, SyncResult, UsageMeta } from "../types/index.ts";
@@ -36,7 +35,7 @@ import type { LedgerFileCursor, LedgerRecord, SyncResult, UsageMeta } from "../t
 const TAIL_BYTES = 4096;
 
 export interface SyncLedgerOptions {
-  /** 缺省 os.homedir()（测试注入临时目录）。 */
+  /** 缺省 resolveHome()（测试注入临时目录）。 */
   readonly home?: string;
   /** 注入"现在"，便于测试断言 lastSyncedAt。 */
   readonly now?: Date;
@@ -55,7 +54,7 @@ interface FileSyncOutcome {
 
 /** 同步官方账本到 ~/.claudeharbor/usage/ledger，返回本轮同步摘要。 */
 export function syncLedger(options: SyncLedgerOptions = {}): SyncResult {
-  const home = options.home ?? homedir();
+  const home = options.home ?? resolveHome();
   const now = options.now ?? new Date();
   const sourceRoot = officialLedgerRoot(home);
   const mirrorRoot = ledgerDir(home);
@@ -186,7 +185,7 @@ function syncOneFile(
   const complete = completeLinesOf(content);
   const scanned = scanVersions(complete);
   writeFileSync(mirrorPath, complete, { encoding: "utf8", mode: 0o600 });
-  chmodSync(mirrorPath, 0o600);
+  applyFileMode(mirrorPath, 0o600);
   const byteOffset = Buffer.byteLength(complete, "utf8");
   return {
     action: "new",
@@ -216,7 +215,7 @@ function rewriteFile(
   const content = completeLinesOf(readFileSync(source.absPath, "utf8"));
   const scanned = scanVersions(content);
   writeFileSync(mirrorPath, content, { encoding: "utf8", mode: 0o600 });
-  chmodSync(mirrorPath, 0o600);
+  applyFileMode(mirrorPath, 0o600);
   const byteOffset = Buffer.byteLength(content, "utf8");
   return {
     action: "rewritten",
@@ -258,7 +257,7 @@ function appendNewBytes(
     if (appended.length > 0) {
       // 追加写：模式与权限随已有镜像文件，写完统一收敛到 0o600。
       writeFileSync(mirrorPath, appended, { encoding: "utf8", flag: "a" });
-      chmodSync(mirrorPath, 0o600);
+      applyFileMode(mirrorPath, 0o600);
     }
   }
   const byteOffset = start + Buffer.byteLength(appended, "utf8");

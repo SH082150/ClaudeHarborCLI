@@ -2,11 +2,15 @@
  * 路径定位：全项目所有路径的唯一出处。
  *
  * 纪律：任何模块禁止自行拼路径，一律从这里取；新增路径先在此登记。
+ * 平台差异（macOS / Windows / Linux）全部收敛在 core/platform，本文件只
+ * 负责把"根"拼成"表"，不出现任何平台判断。
  * home 可注入——测试时传临时目录即可一行换全盘。
  */
 
-import { homedir } from "node:os";
 import { join } from "node:path";
+
+import { desktopDataRoot, harborRoot, resolveHome } from "../../platform/index.ts";
+import type { PlatformOptions } from "../../platform/index.ts";
 
 /** Harbor 侧（~/.claudeharbor）的全部路径。 */
 export interface HarborPaths {
@@ -22,7 +26,7 @@ export interface HarborPaths {
   readonly profilesMeta: string;
 }
 
-/** Claude 侧（Desktop configLibrary）的全部路径。macOS 实测路径。 */
+/** Claude 侧（Desktop configLibrary）的全部路径。 */
 export interface ClaudePaths {
   /** Claude-3p 的 configLibrary 目录（<ProfileID>.json 与 Desktop 同名）。 */
   readonly configLibrary: string;
@@ -30,9 +34,9 @@ export interface ClaudePaths {
   readonly meta: string;
 }
 
-/** Harbor 侧路径表；home 缺省取 os.homedir()。纯计算，无副作用。 */
-export function harborPaths(home: string = homedir()): HarborPaths {
-  const harborHome = join(home, ".claudeharbor");
+/** Harbor 侧路径表；home 缺省取 resolveHome()。纯计算，无副作用。 */
+export function harborPaths(home: string = resolveHome(), opts?: PlatformOptions): HarborPaths {
+  const harborHome = harborRoot(home, opts);
   const providersDir = join(harborHome, "providers");
   const profilesDir = join(harborHome, "profiles");
   return {
@@ -44,15 +48,13 @@ export function harborPaths(home: string = homedir()): HarborPaths {
   };
 }
 
-/** Claude 侧路径表；home 缺省取 os.homedir()。纯计算，无副作用。 */
-export function claudePaths(home: string = homedir()): ClaudePaths {
-  const configLibrary = join(
-    home,
-    "Library",
-    "Application Support",
-    "Claude-3p",
-    "configLibrary",
-  );
+/**
+ * Claude 侧路径表；home 缺省取 resolveHome()。
+ * 3p 数据根由平台层探测（macOS 固定 Application Support；Windows 安装版
+ * 取 %LOCALAPPDATA%，商店版取 MSIX 包内 LocalCache）。
+ */
+export function claudePaths(home: string = resolveHome(), opts?: PlatformOptions): ClaudePaths {
+  const configLibrary = join(desktopDataRoot(home, opts), "configLibrary");
   return {
     configLibrary,
     meta: join(configLibrary, "_meta.json"),

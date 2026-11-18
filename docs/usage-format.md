@@ -1,4 +1,4 @@
-# ClaudeHarbor Usage 账本镜像与聚合查询（v0.1.1）
+# ClaudeHarbor Usage 账本镜像与聚合查询（v0.1.2）
 
 ## 数据源：官方 usage-ledger
 
@@ -7,13 +7,23 @@
 `ClaudeHarborCLI-format/core/usage/research/claude-usage-ledger.md`。
 
 ```text
+# macOS
 ~/Library/Application Support/Claude-3p/local-agent-mode-sessions/
+# Windows（安装版）
+%LOCALAPPDATA%\Claude-3p\local-agent-mode-sessions\
+# Windows（商店版 MSIX）
+%LOCALAPPDATA%\Packages\Claude<随机后缀>\LocalCache\Roaming\Claude-3p\local-agent-mode-sessions\
 └── <account-dir>/            ← 可能多个（多账号 = 多来源）
     └── 00000000/
         └── usage-ledger/
             ├── 2026-10-03.ndjson   ← 一天一个文件，平铺，文件名 = 本地日期
             └── 2026-11-18.ndjson   ← 当天文件持续追加（append-only）
 ```
+
+Windows 的账本根与实际 Claude-3p 数据根一起探测，规则见
+[windows-port.md](windows-port.md)。若自动探测失败，可用
+`claudeharbor --claude-root <Claude-3p 目录> usage sync` 指定数据根；`--claude-root`
+必须指向 `Claude-3p` 目录本身，而不是 `local-agent-mode-sessions`。
 
 - 只支持 3p 客户端，不扫描经典版 `Claude/` 目录；
 - 一行 = 一次 API 调用，含 `v / ts / surface / origin / isError / models / tools`；
@@ -30,7 +40,9 @@
     └── 2026-11-18.ndjson
 ```
 
-镜像按字节复制账本内容（不修改、不补全），文件权限 0600，目录 0700。
+镜像按字节复制账本内容（不修改、不补全），文件权限 0600，目录 0700。Windows 没有
+POSIX 权限位，写入层跳过 `chmod`，实际访问控制由用户目录继承的 NTFS ACL 负责
+（见 [windows-port.md](windows-port.md)）。
 
 ## `_meta.json`
 
@@ -54,6 +66,11 @@
   "warnings": []
 }
 ```
+
+`sourceRoot` 记录同步时实际采用的绝对路径：macOS 为
+`/Users/<user>/Library/Application Support/Claude-3p/local-agent-mode-sessions`，Windows
+安装版为 `C:\Users\<user>\AppData\Local\Claude-3p\local-agent-mode-sessions`，商店版则
+位于对应 MSIX 包的 `LocalCache\Roaming` 下。`files[].source` 中的相对路径统一使用正斜杠。
 
 同步语义：
 

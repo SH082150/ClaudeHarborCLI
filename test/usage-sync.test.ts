@@ -5,19 +5,21 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import { syncLedger } from "../core/usage/index.ts";
+import { officialLedgerRoot } from "../core/usage/paths/index.ts";
 
 function makeHome(): string {
   return mkdtempSync(join(tmpdir(), "claudeharbor-usage-sync-"));
 }
 
-/** 在假官方账本根下写一天的账本文件，返回其绝对路径。 */
+/**
+ * 在假官方账本根下写一天的账本文件，返回其绝对路径。
+ * 根由 officialLedgerRoot(home) 按平台推导（macOS 为 Application Support，
+ * Windows 为 <home>/AppData/Local），目录层级 <根>/<账号>/00000000/
+ * usage-ledger/<day>.ndjson 与官方保持一致。
+ */
 function writeOfficialLedger(home: string, account: string, day: string, content: string): string {
   const path = join(
-    home,
-    "Library",
-    "Application Support",
-    "Claude-3p",
-    "local-agent-mode-sessions",
+    officialLedgerRoot(home),
     account,
     "00000000",
     "usage-ledger",

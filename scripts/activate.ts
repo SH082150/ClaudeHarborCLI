@@ -22,7 +22,7 @@ import { pathToFileURL } from "node:url";
 import type { HarborProfile, MetaEntry, ProfilesMeta } from "../core/types.ts";
 import { printTable } from "./provider.ts";
 
-/** 命令选项：home 注入（由入口的全局 --home 传入，经 env HOME 生效）。 */
+/** 命令选项：home 注入（由入口的全局 --home 传入，经 env CLAUDEHARBOR_HOME 生效）。 */
 export interface ActivateCommandOptions {
   readonly home?: string;
 }
@@ -175,7 +175,7 @@ export async function runActivate(
     console.error(USAGE);
     return 2;
   }
-  void opts; // home 已由入口经 env HOME 注入
+  void opts; // home 已由入口经 env CLAUDEHARBOR_HOME 注入
 
   // ① 读 sidecar；readOnly 拒绝（§4.4：不可更改，只能删除后重建）。
   const profiles = await loadProfiles();

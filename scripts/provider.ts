@@ -9,12 +9,12 @@
  * core/index 由兄弟模块并行开发：这里惰性加载并对导出形状做适配
  * （扁平导出或 archive.providers 命名空间均可），缺失时报中文"待集成"。
  * core 的 archive 函数是异步、无 per-call home 参数的；--home 由入口经
- * env HOME 注入（core 路径表缺省 os.homedir()，POSIX 读 $HOME）。
+ * env CLAUDEHARBOR_HOME 注入（core 路径表缺省 resolveHome()；Windows 上主目录取 USERPROFILE，不读 Git Bash 的 HOME）。
  */
 
 import type { MetaEntry } from "../core/types.ts";
 
-/** 命令组公共选项：home 注入（由入口的全局 --home 传入，经 env HOME 生效）。 */
+/** 命令组公共选项：home 注入（由入口的全局 --home 传入，经 env CLAUDEHARBOR_HOME 生效）。 */
 export interface ProviderCommandOptions {
   readonly home?: string;
 }
@@ -169,7 +169,7 @@ async function cmdAdd(args: readonly string[], opts: ProviderCommandOptions): Pr
   if (authScheme !== "x-api-key" && authScheme !== "bearer") {
     return usageError(`authScheme 只支持 x-api-key 或 bearer，收到 "${authScheme}"`);
   }
-  void opts; // home 已由入口经 env HOME 注入
+  void opts; // home 已由入口经 env CLAUDEHARBOR_HOME 注入
 
   const core = await loadCore();
   const existingNames = (await core.providers.list()).map((e) => e.name);
@@ -198,7 +198,7 @@ async function cmdList(args: readonly string[], opts: ProviderCommandOptions): P
   if (args.length !== 0) {
     return usageError("provider list 不接收额外参数");
   }
-  void opts; // home 已由入口经 env HOME 注入
+  void opts; // home 已由入口经 env CLAUDEHARBOR_HOME 注入
   const core = await loadCore();
   const entries = await core.providers.list();
   if (entries.length === 0) {

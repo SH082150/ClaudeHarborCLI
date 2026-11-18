@@ -50,6 +50,15 @@ function profilesDir(home: string): string {
   return join(harborDir(home), "profiles");
 }
 
+/**
+ * POSIX 权限位断言专用 skip：Windows 的 chmod 只切换只读属性，
+ * `statSync().mode & 0o777` 恒为 0o666，与 600/644 无对等物。
+ * 权限位断言单独成例并在 Windows 跳过，其余业务断言照常执行。
+ */
+function posixModeSkip(): { skip: string | false } {
+  return { skip: process.platform === "win32" ? "Windows 无 POSIX 权限位（chmod 无对等物）" : false };
+}
+
 const deepseek: AddProviderInput = {
   name: "deepseek",
   inferenceGatewayBaseUrl: "https://api.deepseek.com/anthropic",
@@ -75,7 +84,7 @@ const advEntry = (provider: string): ProfileEntryInput => ({
   upstreamModel: "deepseek-chat",
 });
 
-test("create/list/get（standard）：写 644 sidecar、_meta 追加、sidecar 不存 ID/名字", () => {
+test("create/list/get（standard）：_meta 追加、sidecar 不存 ID/名字", () => {
   const home = makeHome();
   try {
     const prov = add(deepseek, { home });
@@ -86,7 +95,6 @@ test("create/list/get（standard）：写 644 sidecar、_meta 追加、sidecar �
 
     const file = join(profilesDir(home), `${entry.id}.json`);
     assert.ok(existsSync(file));
-    assert.equal(statSync(file).mode & 0o777, 0o644);
 
     const sidecar = JSON.parse(readFileSync(file, "utf8"));
     assert.equal(sidecar.version, 1);
@@ -109,7 +117,18 @@ test("create/list/get（standard）：写 644 sidecar、_meta 追加、sidecar �
   }
 });
 
-test("create（advanced）：600 权限、三件套写入、scheme 缺省 bearer", () => {
+test("create（standard）：sidecar 权限为 600（POSIX）", posixModeSkip(), () => {
+  const home = makeHome();
+  try {
+    const entry = create({ name: "DeepSeek 直连", mode: "standard" }, { home });
+    const file = join(profilesDir(home), `${entry.id}.json`);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("create（advanced）：三件套写入、scheme 缺省 bearer", () => {
   const home = makeHome();
   try {
     add(deepseek, { home });
@@ -119,7 +138,6 @@ test("create（advanced）：600 权限、三件套写入、scheme 缺省 bearer
     );
 
     const file = join(profilesDir(home), `${entry.id}.json`);
-    assert.equal(statSync(file).mode & 0o777, 0o600);
     const sidecar = JSON.parse(readFileSync(file, "utf8"));
     assert.equal(sidecar.mode, "advanced");
     assert.equal(sidecar.port, 8787);
@@ -130,6 +148,20 @@ test("create（advanced）：600 权限、三件套写入、scheme 缺省 bearer
     if (profile.mode !== "advanced") assert.fail("应为 advanced");
     assert.equal(profile.port, 8787);
     assert.equal(profile.gatewayToken, "tok");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("create（advanced）：sidecar 权限为 600（POSIX）", posixModeSkip(), () => {
+  const home = makeHome();
+  try {
+    const entry = create(
+      { name: "网关主力", mode: "advanced", port: 8787, gatewayToken: "tok" },
+      { home },
+    );
+    const file = join(profilesDir(home), `${entry.id}.json`);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

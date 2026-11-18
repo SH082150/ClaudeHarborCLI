@@ -188,6 +188,18 @@ test("全流程：create（交互选供应商 + 交互补 advanced）→ list �
     assert.equal(advInteractive.code, 0, advInteractive.stderr);
     assert.match(advInteractive.stdout, /已创建 profile「交互网关」/);
 
+    const profileMeta = JSON.parse(
+      readFileSync(join(home, ".claudeharbor", "profiles", "_meta.json"), "utf8"),
+    ) as { entries: { id: string; name: string }[] };
+    const gatewayId = profileMeta.entries.find((entry) => entry.name === "网关")?.id;
+    assert.ok(gatewayId);
+    const sidecarPath = join(home, ".claudeharbor", "profiles", `${gatewayId}.json`);
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as Record<string, unknown>;
+    sidecar.claude = {
+      inferenceCustomHeaders: { "x-provider-token": "custom-header-secret" },
+    };
+    writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2));
+
     // list：名称/UUID/MODE/条目数列齐全，尚无激活标记。
     const list = await cli(["profile", "list"], { home });
     assert.equal(list.code, 0, list.stderr);
@@ -197,11 +209,13 @@ test("全流程：create（交互选供应商 + 交互补 advanced）→ list �
     assert.match(list.stdout, /advanced/);
     assert.doesNotMatch(list.stdout, /★/);
 
-    // show（按名）：打码 token（前 4 后 2），不泄露原文；供应商 key 不泄露。
+    // show（按名）：打码 token 与自定义头值，不泄露原文；供应商 key 不泄露。
     const show = await cli(["profile", "show", "网关"], { home });
     assert.equal(show.code, 0, show.stderr);
     assert.match(show.stdout, /sidecar 全文/);
     assert.match(show.stdout, /myto…23/);
+    assert.match(show.stdout, /"x-provider-token": "\*\*\*\*"/);
+    assert.ok(!show.stdout.includes("custom-header-secret"), "show 输出不得包含自定义头令牌");
     assert.ok(!show.stdout.includes("mytoken123"), "show 输出不得包含完整 gatewayToken");
     assert.ok(!show.stdout.includes("sk-testsecret"), "show 输出不得包含完整供应商密钥");
     assert.match(show.stdout, /8787/);

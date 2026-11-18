@@ -11,9 +11,9 @@
  */
 
 import { readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { resolveHome } from "../../platform/index.ts";
 import { ledgerDir } from "../paths/index.ts";
 import { KNOWN_LEDGER_VERSION } from "../types/index.ts";
 import type {
@@ -26,7 +26,7 @@ import type {
 } from "../types/index.ts";
 
 export interface AggregateUsageOptions {
-  /** 缺省 os.homedir()（测试注入临时目录）。 */
+  /** 缺省 resolveHome()（测试注入临时目录）。 */
   readonly home?: string;
 }
 
@@ -35,7 +35,7 @@ export function aggregateUsage(
   filter: UsageFilter = {},
   options: AggregateUsageOptions = {},
 ): DayAggregate[] {
-  const root = ledgerDir(options.home ?? homedir());
+  const root = ledgerDir(options.home ?? resolveHome());
   const buckets = new Map<string, DayAggregate>();
 
   for (const file of listMirrorFiles(root)) {

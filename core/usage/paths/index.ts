@@ -3,31 +3,34 @@
  *
  * 只支持 3p 客户端（Claude-3p），不碰经典版 Claude 目录
  * （research §2：经典版路径为 Claude/local-agent-mode-sessions，本项目不扫描）。
+ * 官方账本根与 Harbor 镜像根都经 ../platform 计算，平台差异不出现在本文件。
  * 所有函数允许注入 home，便于测试指向临时目录。
  */
 
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, relative } from "node:path";
 
-/** 官方 usage-ledger 账本根（含空格的 Application Support 用 path.join 拼）。 */
-export function officialLedgerRoot(home: string = homedir()): string {
-  return join(home, "Library/Application Support/Claude-3p/local-agent-mode-sessions");
+import { harborRoot, localAgentSessionsRoot, resolveHome } from "../../platform/index.ts";
+import type { PlatformOptions } from "../../platform/index.ts";
+
+/** 官方 usage-ledger 账本根：`<Claude-3p>/local-agent-mode-sessions`。 */
+export function officialLedgerRoot(home: string = resolveHome(), opts?: PlatformOptions): string {
+  return localAgentSessionsRoot(home, opts);
 }
 
 /** ClaudeHarbor Usage 镜像根：~/.claudeharbor/usage。 */
-export function usageRoot(home: string = homedir()): string {
-  return join(home, ".claudeharbor", "usage");
+export function usageRoot(home: string = resolveHome(), opts?: PlatformOptions): string {
+  return join(harborRoot(home, opts), "usage");
 }
 
 /** 镜像账本目录：usageRoot/ledger（按天平铺，与官方同构）。 */
-export function ledgerDir(home: string = homedir()): string {
-  return join(usageRoot(home), "ledger");
+export function ledgerDir(home: string = resolveHome(), opts?: PlatformOptions): string {
+  return join(usageRoot(home, opts), "ledger");
 }
 
 /** 镜像目录的 _meta.json。 */
-export function metaFile(home: string = homedir()): string {
-  return join(usageRoot(home), "_meta.json");
+export function metaFile(home: string = resolveHome(), opts?: PlatformOptions): string {
+  return join(usageRoot(home, opts), "_meta.json");
 }
 
 export interface OfficialLedgerFile {
@@ -66,6 +69,7 @@ export function listOfficialLedgerFiles(root: string): OfficialLedgerFile[] {
         result.push({
           day: file.name.slice(0, -".ndjson".length),
           absPath,
+          // sourceRel 统一用正斜杠：它是跨平台元数据（Windows 分隔符不泄漏）。
           sourceRel: relative(root, absPath).split("\\").join("/"),
         });
       }

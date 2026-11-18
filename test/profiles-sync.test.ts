@@ -1,6 +1,7 @@
 /**
- * profiles 创建即同步单测：注入临时 home，Claude 侧 =
- * <home>/Library/Application Support/Claude-3p/configLibrary。覆盖：
+ * profiles 创建即同步单测：注入临时 home，Claude 侧目录一律由
+ * claudePaths(home) 计算（macOS / Windows / Linux 各自落到平台层探测到的
+ * 3p 数据根下的 configLibrary，测试不硬编码任何平台路径）。覆盖：
  * create（advanced 总是同步 / standard 有条目同步、无条目跳过并注明）、
  * 条目增删改后 Claude 侧跟随、remove 双侧清理、rename 两侧名字一致、
  * Claude _meta 登记与移除。运行：node --test test/profiles-sync.test.ts
@@ -36,19 +37,20 @@ import {
   updateEntry,
   type ProfileEntryInput,
 } from "../core/archive/profiles/index.ts";
+import { claudePaths, harborPaths } from "../core/archive/paths/index.ts";
 import type { Provider } from "../core/types.ts";
 
 function makeHome(): string {
   return mkdtempSync(join(tmpdir(), "harbor-profiles-sync-"));
 }
 
-/** Claude 侧 configLibrary 目录（paths 契约）。 */
+/** Claude 侧 configLibrary 目录（paths 契约，平台差异由平台层收口）。 */
 function configLibrary(home: string): string {
-  return join(home, "Library", "Application Support", "Claude-3p", "configLibrary");
+  return claudePaths(home).configLibrary;
 }
 
 function profilesDir(home: string): string {
-  return join(home, ".claudeharbor", "profiles");
+  return harborPaths(home).profilesDir;
 }
 
 const deepseek: AddProviderInput = {
@@ -235,7 +237,7 @@ test("remove：Claude 侧文件与 Claude _meta 条目双侧清理；激活仍�
     );
     const standby = create({ name: "备用", mode: "standard", inferenceModels: [stdEntry(prov.id)] }, { home });
 
-    const claudeMetaFile = join(configLibrary(home), "_meta.json");
+    const claudeMetaFile = claudePaths(home).meta;
     const meta = JSON.parse(readFileSync(claudeMetaFile, "utf8")) as {
       appliedId: string | null;
       entries: { id: string; name: string }[];

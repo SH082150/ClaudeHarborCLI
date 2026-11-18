@@ -6,8 +6,9 @@
  * 标识机制（file-formats.md §3.7）：UUID v4 是唯一身份（文件名 = _meta.id，
  * 与 Claude configLibrary 里的同名文件一致），sidecar 内不存 ID 和名字；
  * name 是纯显示标签、唯一真相源在 _meta。三种 mode：standard（条目带
- * provider）/ advanced（条目再带 upstreamModel，sidecar 含网关三件套、
- * 权限 600）/ readOnly（Claude 外来镜像，一切写操作拒绝，只可删两侧）。
+ * provider）/ advanced（条目再带 upstreamModel，sidecar 含网关三件套）/
+ * readOnly（Claude 外来镜像，一切写操作拒绝，只可删两侧）。
+ * 所有 sidecar 统一按敏感档案使用权限 600，避免透传块中的自定义凭证扩大可读范围。
  *
  * 生命周期（创建即同步，file-formats §4）：create（校验 → 生成 UUID →
  * 先写 sidecar → _meta 追加 → 立即同步推导 Claude profile）、rename
@@ -69,7 +70,7 @@ import type {
   StandardModelEntry,
 } from "../../types.ts";
 
-/** 调用选项：可注入 home（测试/ --home 全局选项），缺省 os.homedir()。 */
+/** 调用选项：可注入 home（测试/ --home 全局选项），缺省 resolveHome()（见 core/platform）。 */
 export interface ProfilesOptions {
   readonly home?: string;
 }
@@ -300,11 +301,6 @@ function readSidecar(id: string, opts?: ProfilesOptions): HarborProfile {
   return profile;
 }
 
-/** 按 mode 定文件权限：advanced 含网关 token，仅本人可读。 */
-function fileModeOf(profile: HarborProfile): number {
-  return profile.mode === "advanced" ? SECRET_MODE : NORMAL_MODE;
-}
-
 /** 由 profile + 新条目数组组装 sidecar 对象（键序对齐 file-formats §3.4/§3.5 示例）。 */
 function sidecarOf(
   profile: HarborProfile,
@@ -321,9 +317,9 @@ function sidecarOf(
   return out;
 }
 
-/** 写 sidecar（调用方已保证父目录存在）。 */
+/** 写 sidecar（调用方已保证父目录存在）；透传块可能含自定义凭证，统一按敏感档案处理。 */
 function writeSidecar(id: string, profile: HarborProfile, models: readonly Record<string, unknown>[], opts?: ProfilesOptions): void {
-  atomicWriteJson(join(p(opts).profilesDir, `${id}.json`), sidecarOf(profile, models), fileModeOf(profile));
+  atomicWriteJson(join(p(opts).profilesDir, `${id}.json`), sidecarOf(profile, models), SECRET_MODE);
 }
 
 // ---------- 创建即同步（file-formats §4：创建/条目修改即推导 Claude profile） ----------
@@ -478,7 +474,7 @@ function validateInitialModels(mode: "standard" | "advanced", inputs: readonly P
 
 /**
  * 创建 profile：校验名字与 mode 字段 → 生成 UUID v4 → 先写 sidecar
- * （advanced 用 SECRET_MODE 600）→ _meta 追加 {id, name} → 创建即同步：
+ * （所有模式统一用 SECRET_MODE 600）→ _meta 追加 {id, name} → 创建即同步：
  * 重推导 Claude profile 写 configLibrary 并登记 Claude _meta（advanced
  * 总是；standard 有条目且 provider 可解析才同步，否则 note 注明
  * "添加条目后自动同步"，addEntry 时会补上）。
@@ -544,7 +540,7 @@ export function create(input: CreateProfileInput, opts?: ProfilesOptions): Creat
   atomicWriteJson(
     join(dir, `${id}.json`),
     sidecar,
-    input.mode === "advanced" ? SECRET_MODE : NORMAL_MODE,
+    SECRET_MODE,
   );
   writeMeta(
     { version: 1, appliedId: meta.appliedId, entries: [...meta.entries, { id, name: input.name }] },
@@ -835,7 +831,7 @@ export function importFromClaude(id: string, opts?: ProfilesOptions): ImportRepo
   if (Object.keys(passthrough).length > 0) sidecar.claude = passthrough;
   const dir = p(opts).profilesDir;
   mkdirSync(dir, { recursive: true });
-  atomicWriteJson(join(dir, `${id}.json`), sidecar, NORMAL_MODE);
+  atomicWriteJson(join(dir, `${id}.json`), sidecar, SECRET_MODE);
 
   const entries = meta.entries.some((e) => e.id === id)
     ? meta.entries.map((e) => (e.id === id ? { id, name } : e))

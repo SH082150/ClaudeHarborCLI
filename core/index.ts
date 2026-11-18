@@ -9,6 +9,7 @@
  */
 
 export * from "./types.ts";
+export * as platform from "./platform/index.ts";
 export * as validate from "./validate/index.ts";
 export * as providers from "./archive/providers/index.ts";
 export * as profiles from "./archive/profiles/index.ts";

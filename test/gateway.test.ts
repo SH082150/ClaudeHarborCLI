@@ -36,6 +36,7 @@ import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { format } from "node:util";
 import type { TestContext } from "node:test";
 
 import type { AdvancedModelEntry, Provider } from "../core/types.ts";
@@ -43,6 +44,22 @@ import { add as addProvider } from "../core/archive/providers/index.ts";
 import { create as createProfile } from "../core/archive/profiles/index.ts";
 import { claudePaths } from "../core/archive/paths/index.ts";
 import { runGatewayRun } from "../scripts/gateway-run.ts";
+
+// ---------- Windows 上 node 测试运行器的已知缺陷规避 ----------
+//
+// node 24.11 的测试运行器把子进程的 v8 序列化帧和普通 stdout 混在同一个管道里
+// 解析，且帧长度按有符号 32 位读取（nodejs/node#64061，后续 24.x 已修复）。
+// 一旦普通日志紧跟在某个协议帧之后，非 ASCII 字节（中文/emoji 的 UTF-8 首字节
+// 均 >= 0x80）就会被当成负的帧长度，整个文件直接报
+// 「Unable to deserialize cloned data due to invalid or unsupported version」，
+// 表现为随机某个用例处中断，单跑本文件又可能通过。
+//
+// 网关启动横幅（core/gateway/0-server 的「网关已启动：…」）是中文且必然打印，
+// 因此这里把 console.log 改道到 stderr：stderr 由运行器按行转发、不参与协议
+// 解析，日志照常可见，用例断言不受影响。console.warn/error 本来就写 stderr。
+console.log = (...args: unknown[]): void => {
+  process.stderr.write(`${format(...args)}\n`);
+};
 
 // ---------- startGateway 接口面（与 scripts/gateway-run.ts 同一份结构类型） ----------
 

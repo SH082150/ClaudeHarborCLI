@@ -19,19 +19,20 @@ import { join } from "node:path";
 
 import { add as addProvider } from "../core/archive/providers/index.ts";
 import { create as createProfile, addEntry } from "../core/archive/profiles/index.ts";
+import { claudePaths } from "../core/archive/paths/index.ts";
 import { gate, CheckError } from "../core/check/index.ts";
 import type { Diff, GateResult } from "../core/check/index.ts";
 
+/** 临时 home + Claude 侧 configLibrary；具体位置由平台层决定（macOS 在
+ * Library/Application Support，Windows 在 AppData\Local\Claude-3p）。 */
 function makeHome(): string {
   const home = mkdtempSync(join(tmpdir(), "harbor-check-"));
-  mkdirSync(join(home, "Library", "Application Support", "Claude-3p", "configLibrary"), {
-    recursive: true,
-  });
+  mkdirSync(claudePaths(home).configLibrary, { recursive: true });
   return home;
 }
 
 function claudeDir(home: string): string {
-  return join(home, "Library", "Application Support", "Claude-3p", "configLibrary");
+  return claudePaths(home).configLibrary;
 }
 
 function profilesDir(home: string): string {

@@ -30,7 +30,7 @@ import { atomicWriteJson, NORMAL_MODE, readJson, SECRET_MODE } from "../fs/index
 import { validateBaseUrl, validateProviderName } from "../../validate/provider.ts";
 import type { MetaEntry, Provider, ProvidersMeta } from "../../types.ts";
 
-/** 调用选项：可注入 home（测试/ --home 全局选项），缺省 os.homedir()。 */
+/** 调用选项：可注入 home（测试/ --home 全局选项），缺省 resolveHome()（见 core/platform）。 */
 export interface ProvidersOptions {
   readonly home?: string;
 }

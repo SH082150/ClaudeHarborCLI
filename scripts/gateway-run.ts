@@ -11,7 +11,7 @@
  *   → 打印「网关监听 127.0.0.1:<port>（Ctrl-C 停止）」→ 挂住进程，
  *     SIGINT/SIGTERM 时 close() 后退出 0。
  *
- * home 注入：入口已把 --home 经 env HOME 在 core 首次加载前注入；opts.home
+ * home 注入：入口已把 --home 经 env CLAUDEHARBOR_HOME 在 core 首次加载前注入；opts.home
  * 仅测试直注用（profiles/providers 的 opts 参数原样透传）。
  */
 
@@ -20,7 +20,7 @@ import { pathToFileURL } from "node:url";
 import type { AdvancedModelEntry, HarborProfile, Provider } from "../core/types.ts";
 import { printTable } from "./provider.ts";
 
-/** 命令选项：home 注入（由入口的全局 --home 传入，经 env HOME 生效）。 */
+/** 命令选项：home 注入（由入口的全局 --home 传入，经 env CLAUDEHARBOR_HOME 生效）。 */
 export interface GatewayRunCommandOptions {
   readonly home?: string;
 }

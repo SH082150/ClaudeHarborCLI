@@ -6,3 +6,7 @@ node_modules/
 !.env.example
 .release-check.*/
 *.log
+/.claudeharbor/
+/AppData/
+*.tmp
+*.dmp

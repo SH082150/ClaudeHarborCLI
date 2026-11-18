@@ -26,26 +26,19 @@ import {
   syncNames,
   upsertEntry,
 } from "../core/archive/claude-meta/index.ts";
+import { claudePaths } from "../core/archive/paths/index.ts";
 import type { MetaEntry } from "../core/types.ts";
 
-/** Claude 侧目录布局（paths 契约）：home/Library/Application Support/Claude-3p/configLibrary */
+/** Claude 侧目录布局由平台层决定（macOS 在 Library/Application Support，
+ * Windows 在 AppData\Local\Claude-3p），夹具不得硬编码平台路径。 */
 function makeHome(): string {
   const home = mkdtempSync(join(tmpdir(), "harbor-claude-meta-"));
-  mkdirSync(join(home, "Library", "Application Support", "Claude-3p", "configLibrary"), {
-    recursive: true,
-  });
+  mkdirSync(claudePaths(home).configLibrary, { recursive: true });
   return home;
 }
 
 function metaFile(home: string): string {
-  return join(
-    home,
-    "Library",
-    "Application Support",
-    "Claude-3p",
-    "configLibrary",
-    "_meta.json",
-  );
+  return claudePaths(home).meta;
 }
 
 const A: MetaEntry = { id: "a1c9f2e3-8b7a-4c5d-9e0f-1234567890ab", name: "多供应商主力" };

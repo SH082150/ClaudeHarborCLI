@@ -7,9 +7,10 @@
  * profile，也不启动网关）：
  *
  * - import 单元层（进程内直调 core/archive/profiles，不依赖兄弟模块）：
- *   手工造 Claude 侧结构（<home>/Library/Application Support/Claude-3p/
- *   configLibrary/<UUID>.json + _meta.json），断言 readOnly sidecar 生成、
- *   诊断报告、_meta 对齐、CONFLICT/NOT_FOUND/VALIDATION 分支。
+ *   手工造 Claude 侧结构（claudePaths(home).configLibrary/<UUID>.json +
+ *   _meta.json，目录位置随平台层走，macOS/Windows 同一套用例），断言
+ *   readOnly sidecar 生成、诊断报告、_meta 对齐、
+ *   CONFLICT/NOT_FOUND/VALIDATION 分支。
  * - import CLI 层（子进程跑 scripts/claudeharbor.ts，--home 注入临时目录）。
  * - check / activate 全链（子进程）：依赖兄弟模块（core/check 的 gate、
  *   archive/claude-meta，及 core/index 登记 fs/paths/check/claudeMeta
@@ -20,11 +21,13 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { claudePaths } from "../core/archive/paths/index.ts";
 
 const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "../scripts/claudeharbor.ts");
 
@@ -73,9 +76,13 @@ async function cli(
   });
 }
 
-/** Claude 侧目录（与 core/archive/paths 的 claudePaths 一致）。 */
+/**
+ * Claude 侧 configLibrary 目录。
+ * 一律经 claudePaths 计算（macOS 为 Application Support，Windows 为
+ * AppData；相对注入的临时 home 派生），夹具不自行拼平台路径。
+ */
 function claudeConfigLibrary(home: string): string {
-  return join(home, "Library", "Application Support", "Claude-3p", "configLibrary");
+  return claudePaths(home).configLibrary;
 }
 
 /** 造 Claude 侧结构：configLibrary/<UUID>.json + _meta.json（含该 UUID 的 name）。 */
@@ -154,6 +161,10 @@ test("importFromClaude：生成 readOnly sidecar + 诊断报告 + _meta 对齐",
     ) as Record<string, unknown>;
     assert.equal(sidecar.mode, "readOnly");
     assert.equal(sidecar.version, 1);
+    if (process.platform !== "win32") {
+      const file = join(home, ".claudeharbor", "profiles", `${FOREIGN_UUID}.json`);
+      assert.equal(statSync(file).mode & 0o777, 0o600);
+    }
     assert.deepEqual(sidecar.inferenceModels, FOREIGN_PROFILE.inferenceModels);
     const claude = sidecar.claude as Record<string, unknown>;
     assert.equal(claude.inferenceStreamIdleTimeoutSec, 900);

@@ -37,6 +37,15 @@ function profilesDir(home: string): string {
   return join(harborDir(home), "profiles");
 }
 
+/**
+ * POSIX 权限位断言专用 skip：Windows 的 chmod 只切换只读属性，
+ * `statSync().mode & 0o777` 恒为 0o666，与 600 无对等物。
+ * 权限位断言单独成例并在 Windows 跳过，其余业务断言照常执行。
+ */
+function posixModeSkip(): { skip: string | false } {
+  return { skip: process.platform === "win32" ? "Windows 无 POSIX 权限位（chmod 无对等物）" : false };
+}
+
 const deepseek: AddProviderInput = {
   name: "deepseek",
   inferenceGatewayBaseUrl: "https://api.deepseek.com/anthropic",
@@ -51,7 +60,7 @@ const kimi: AddProviderInput = {
   inferenceGatewayAuthScheme: "bearer",
 };
 
-test("add + list：写 600 文件、_meta 追加、列表按顺序", () => {
+test("add + list：文件落盘、_meta 追加、列表按顺序", () => {
   const home = makeHome();
   try {
     const a = add(deepseek, { home });
@@ -68,11 +77,21 @@ test("add + list：写 600 文件、_meta 追加、列表按顺序", () => {
 
     const file = join(providersDir(home), `${a.id}.json`);
     assert.ok(existsSync(file));
-    assert.equal(statSync(file).mode & 0o777, 0o600);
 
     const metaRaw = JSON.parse(readFileSync(join(providersDir(home), "_meta.json"), "utf8"));
     assert.equal(metaRaw.version, 1);
     assert.deepEqual(metaRaw.entries, entries);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("add：供应商文件权限为 600（POSIX）", posixModeSkip(), () => {
+  const home = makeHome();
+  try {
+    const a = add(deepseek, { home });
+    const file = join(providersDir(home), `${a.id}.json`);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

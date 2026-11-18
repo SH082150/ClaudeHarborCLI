@@ -4,7 +4,7 @@
 
 **A Dual-Side Profile Synchronization and Multi-Provider Local Gateway Architecture for Claude Desktop**
 
-版本：0.1.1 · 平台：macOS · 许可证：MIT
+版本：0.1.2 · 平台：macOS / Windows · 许可证：MIT
 
 ## 摘要
 
@@ -24,7 +24,7 @@ ClaudeHarborCLI addresses the coupling between provider configuration and model 
 
 > 独立的非官方项目，与 Anthropic 没有隶属或背书关系。当前发布的是 CLI；Electron UI 不在本版本中。
 >
-> 完整数据格式、文件管理与生命周期规则见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+> 完整数据格式、文件管理与生命周期规则见 [ARCHITECTURE.md](ARCHITECTURE.md)；Windows 数据根发现与移植约定见 [docs/windows-port.md](docs/windows-port.md)。
 
 ## 中文
 
@@ -63,7 +63,8 @@ ClaudeHarborCLI 为供应商建立了独立的本地数据库。这里的“数�
     ├── _meta.json                 # profile 索引与本地激活镜像
     └── <profile-UUID>.json        # 生成与路由所需的 superset sidecar
 
-~/Library/Application Support/Claude-3p/configLibrary/
+~/Library/Application Support/Claude-3p/configLibrary/   # macOS
+%LOCALAPPDATA%\Claude-3p\configLibrary\                   # Windows（安装版）
 ├── _meta.json                     # Claude 主索引与 appliedId
 └── <profile-UUID>.json            # 由 sidecar 推导的客户端子集
 ```
@@ -114,13 +115,15 @@ claude-haiku-main  → 供应商 C 的 upstream-model-c
 
 ### 4. 安全模型与故障边界
 
-系统的主要安全边界是本机文件权限、回环监听和凭证用途分离。供应商密钥文件使用 `0600` 权限，CLI 展示供应商和 sidecar 时对敏感字段打码；advanced profile 写入 Claude 侧的是本地网关令牌，而非全部上游密钥；网关不记录完整请求体，也不把 Desktop 的本地认证头转发给供应商。需要特别注意的是，当前 CLI 通过命令行参数接收供应商密钥，shell 历史和进程列表仍可能暴露命令参数，因此现阶段应把密钥输入方式视为安全模型的已知限制，而不能仅凭文件权限判断整个链路已经消除泄露风险。
+系统的主要安全边界是本机文件权限、回环监听和凭证用途分离。供应商密钥文件使用 `0600` 权限，CLI 对供应商 key 和 advanced sidecar 的 `gatewayToken` 打码；advanced profile 写入 Claude 侧的是本地网关令牌，而非全部上游密钥；网关不记录完整请求体，也不把 Desktop 的本地认证头转发给供应商。需要特别注意的是，当前 CLI 通过命令行参数接收供应商密钥，shell 历史和进程列表仍可能暴露命令参数，因此现阶段应把密钥输入方式视为安全模型的已知限制，而不能仅凭文件权限判断整个链路已经消除泄露风险。
+
+按当前本机威胁模型，一致性 diff 在 `inferenceGatewayApiKey` 缺失、或未密封且与期望不同时仍可能显示明文值，这是保留的本地诊断行为；不要把 `profile check`、`activate` 或 `gateway-run` 的原始输出粘贴到公开位置。`profile show` 会遮盖 advanced `gatewayToken` 以及所有 `inferenceCustomHeaders` 的值。
 
 故障处理遵循“尽早拒绝、原样返回”的原则。本地校验、鉴权、路由和连接错误使用明确的 Anthropic 风格错误信封；已经进入上游响应阶段的错误则不再重新包装。当前版本没有自动故障转移、重试和超时策略，也没有配置备份。这些选择降低了初版状态机的复杂度，但意味着上游长时间无响应、限流或失效时仍需要用户介入，后续优化不能只增加重试代码，还必须同时定义请求取消、重复生成和费用责任等语义。
 
 ### 5. 验证方法
 
-验证分为纯函数测试、文件系统测试、真实 socket 集成测试、隔离安装验收和 macOS 客户端联调。纯函数与文件系统测试覆盖 UUID 索引、原子写入、权限、校验和双侧生命周期；网关测试使用本地假上游检查鉴权、模型改写、查询保留、JSON/SSE 透传、错误矩阵和客户端断连；隔离安装验收通过安装后的 `claudeharbor` 命令完成双供应商建库、profile 创建、路由添加、激活、模型发现和实际 HTTP 转发。当前测试命令包含 230 项用例，其中 228 项通过、2 项为历史防御分支占位跳过，类型检查无错误。真机联调已覆盖模型发现、真实对话、多供应商调用、工作流子智能体以及按“最便宜”要求选择 haiku 档位的行为，但这些结论仍受当前 Claude Desktop 版本约束，客户端升级后应重新验证。
+验证分为纯函数测试、文件系统测试、真实 socket 集成测试、隔离安装验收和 macOS 客户端联调。纯函数与文件系统测试覆盖 UUID 索引、原子写入、权限、校验和双侧生命周期；网关测试使用本地假上游检查鉴权、模型改写、查询保留、JSON/SSE 透传、错误矩阵和客户端断连；隔离安装验收通过安装后的 `claudeharbor` 命令完成双供应商建库、profile 创建、路由添加、激活、模型发现和实际 HTTP 转发。当前测试命令包含 269 项用例；在 Windows 上为 260 项通过、0 项失败、9 项跳过（其中 7 项因 Windows 无 POSIX 权限位而按平台跳过，2 项为历史防御分支占位），在 macOS 上这 7 项按原样执行，类型检查无错误。真机联调已覆盖模型发现、真实对话、多供应商调用、工作流子智能体以及按“最便宜”要求选择 haiku 档位的行为，但这些结论仍受当前 Claude Desktop 版本约束，客户端升级后应重新验证。Windows 侧的路径探测、`%APPDATA%` 壳判定、权限降级与 rename 重试已由隔离测试覆盖，真机验收项见 [docs/windows-port.md](docs/windows-port.md)。
 
 ### 6. 后续优化空间
 
@@ -132,36 +135,52 @@ claude-haiku-main  → 供应商 C 的 upstream-model-c
 
 **运行时与界面。** 当前网关随前台终端运行，未来可以增加受控的后台服务、配置热更新和更直观的路由健康状态。Electron UI 应直接调用 `core/index.ts` 的公共能力，而不是复制 profile 或路由业务逻辑，使 CLI 与 GUI 共享相同的一致性门禁和生命周期规则。
 
-**平台与协议扩展。** Windows 支持需要先抽象并验证平台路径和凭证存储，不能只替换目录字符串。协议转换如果未来纳入路线，也应作为独立适配器层置于原生 Anthropic Messages 主链路之外，明确字段能力损失和测试矩阵，而不改变当前“只改模型与凭证、响应字节透传”的核心约束。
+**平台与协议扩展。** v0.1.2 已引入统一的平台层，收敛 macOS 与 Windows 的路径计算、Claude-3p 数据根探测、`--claude-root` 覆盖、权限降级与 rename 重试（规则与验收清单见 [docs/windows-port.md](docs/windows-port.md)）；Windows 真机上的 Desktop 联调、ACL 与杀毒软件共存仍需逐项确认。协议转换如果未来纳入路线，也应作为独立适配器层置于原生 Anthropic Messages 主链路之外，明确字段能力损失和测试矩阵，而不改变当前“只改模型与凭证、响应字节透传”的核心约束。
 
 ### 附录 A：安装与最小使用示例
 
-要求：macOS、Node.js 24 或更高版本、支持第三方 inference gateway 的 Claude Desktop。
+要求：macOS 或 Windows、Node.js 22.18 或更高版本、支持第三方 inference gateway 的 Claude Desktop。
+
+零运行时依赖，因此运行 CLI **不需要 `npm install`**。从 GitHub 获取代码：
 
 ```bash
 git clone https://github.com/SH082150/ClaudeHarborCLI.git
 cd ClaudeHarborCLI
-npm install
-npm link
+```
+
+两种用法：
+
+```bash
+# 方式一：不安装，macOS / Windows 使用同一条命令
+node bin/claudeharbor.ts --help
+node bin/claudeharbor.ts status
+
+# 方式二：装成全局命令 claudeharbor，之后在任何目录可用
+npm install -g .
 claudeharbor --help
 ```
+
+换电脑或移动仓库目录不需要修改源码：在仓库根目录用 `node bin/claudeharbor.ts` 运行，数据根按当前用户和操作系统计算。Windows 上先运行 `node bin/claudeharbor.ts paths` 核对采用值，自动探测失败时用 `--claude-root <Claude-3p 目录>` 指定。不要提交真实的 `~/.claudeharbor`、Claude-3p 数据目录或 Usage 镜像；它们包含密钥、用户路径或使用记录。
 
 建议先完全退出 Claude Desktop。以下地址、模型名和密钥均为示例，请替换为实际配置：
 
 ```bash
-claudeharbor provider add first https://api.example.com/anthropic '<API_KEY_1>' x-api-key
-claudeharbor provider add second https://api.example.org/anthropic '<API_KEY_2>' bearer
-claudeharbor profile create MyGateway --mode advanced --port 8787 --token '<LOCAL_TOKEN>' --auth-scheme bearer
-claudeharbor profile route-add MyGateway --name claude-sonnet-main --provider first --upstream upstream-model-a --label '主力模型' --tier sonnet
-claudeharbor profile route-add MyGateway --name claude-haiku-main --provider second --upstream upstream-model-b --label '快速模型' --tier haiku
-claudeharbor profile check MyGateway
-claudeharbor activate MyGateway
-claudeharbor gateway-run MyGateway
+node bin/claudeharbor.ts provider add first https://api.example.com/anthropic '<API_KEY_1>' x-api-key
+node bin/claudeharbor.ts provider add second https://api.example.org/anthropic '<API_KEY_2>' bearer
+node bin/claudeharbor.ts profile create MyGateway --mode advanced --port 8787 --token '<LOCAL_TOKEN>' --auth-scheme bearer
+node bin/claudeharbor.ts profile route-add MyGateway --name claude-sonnet-main --provider first --upstream upstream-model-a --label '主力模型' --tier sonnet
+node bin/claudeharbor.ts profile route-add MyGateway --name claude-haiku-main --provider second --upstream upstream-model-b --label '快速模型' --tier haiku
+node bin/claudeharbor.ts profile check MyGateway
+node bin/claudeharbor.ts activate MyGateway
+node bin/claudeharbor.ts gateway-run MyGateway
 ```
 
 保持 `gateway-run` 所在终端运行，然后启动 Claude Desktop 并选择已激活的 profile。`activate` 只切换配置，不启动网关；按 `Ctrl-C` 停止网关。
 
 ### 附录 B：命令接口
+
+Windows 上用 `node bin/claudeharbor.ts paths` 查看数据根候选与采用值；自动探测失败时，在子命令前加
+`--claude-root <Claude-3p 目录>` 手工指定（详见 [docs/windows-port.md](docs/windows-port.md)）。
 
 ```text
 claudeharbor provider add <名称> <baseUrl> <密钥> [x-api-key|bearer]
@@ -182,6 +201,7 @@ claudeharbor profile route-update <profile> <别名> [--label <显示名> --tier
 claudeharbor activate <id或名>
 claudeharbor gateway-run <id或名>
 claudeharbor status
+claudeharbor paths
 
 claudeharbor usage sync
 claudeharbor usage query [--day <日期>] [--from <日期>] [--to <日期>] [--surface <chat|code|cowork>] [--origin <turn|title|connection_probe>] [--model <模型名>]
@@ -194,6 +214,7 @@ claudeharbor usage query [--day <日期>] [--from <日期>] [--to <日期>] [--s
 | 导出 | 主要函数/内容 | 作用 |
 |---|---|---|
 | 类型导出 | `Provider`、`HarborProfile`、`ModelEntry`、`MetaEntry` 等 | 领域类型 |
+| `platform` | `resolveHome()`、`desktopDataRoot()`、`desktopDataRootCandidates()`、`localAgentSessionsRoot()`、`inspectDesktopRoots()`、`harborRoot()`、`claudeCodeRoot()` | 平台路径解析与 Claude-3p 数据根探测 |
 | `paths` | `harborPaths()`、`claudePaths()` | 统一计算两侧文件路径 |
 | `fs` | `atomicWriteJson()`、`readJson()` | 原子 JSON 写入、权限控制与读取 |
 | `providers` | `add()`、`list()`、`getByName()`、`getById()`、`rename()`、`remove()`、`metaRebuild()` | 独立供应商数据库与 UUID 索引 |
@@ -205,7 +226,7 @@ claudeharbor usage query [--day <日期>] [--from <日期>] [--to <日期>] [--s
 | `gateway` | `startGateway()` | 启动本地网关并返回关闭句柄 |
 | `usage` | `syncLedger()`、`aggregateUsage()` | 官方 usage-ledger 镜像同步与按天聚合查询 |
 
-开发验证：
+开发验证（首次开发先运行 `npm ci` 安装 TypeScript 与类型定义等开发依赖；只运行 CLI 可跳过）：
 
 ```bash
 npm test
@@ -213,6 +234,13 @@ npm run typecheck
 ```
 
 ### 更新日志
+
+#### v0.1.2
+
+- 新增 Windows 支持：平台层统一 macOS 与 Windows 的路径计算与 Claude-3p 数据根探测。安装版采用 `%LOCALAPPDATA%\Claude-3p`，商店版（MSIX）扫描 `Packages\Claude*\LocalCache\Roaming\Claude-3p`；`%APPDATA%\Claude-3p` 仅作为候选，并按是否含 `configLibrary` / `local-agent-mode-sessions` 择优。
+- 新增 `claudeharbor paths` 诊断命令与全局选项 `--claude-root <目录>`（环境变量 `CLAUDEHARBOR_CLAUDE_ROOT`），用于自动探测失败时手工指定数据根。
+- Windows 上 POSIX 权限位无对等物：写入层静默跳过 `chmod`，密钥文件依赖用户目录继承的 NTFS ACL；`rename` 在杀毒软件或索引服务占用时做有限重试。
+- 测试夹具改为经 `claudePaths()` / `officialLedgerRoot()` 计算 Claude 侧路径，不再硬编码 `Library/Application Support`。数据根规则、权限降级与真机验收清单见 [docs/windows-port.md](docs/windows-port.md)。
 
 #### v0.1.1
 
@@ -224,6 +252,8 @@ npm run typecheck
 [MIT](LICENSE)
 
 ## English
+
+**Version: 0.1.2 · Platforms: macOS / Windows · License: MIT**
 
 ### 1. Introduction
 
@@ -287,31 +317,48 @@ Creation, route edits, renaming, deletion, activation, and gateway startup have 
 
 ### 4. Security and failure boundaries
 
-Provider files use mode `0600`, CLI output masks sensitive fields, the gateway listens only on `127.0.0.1`, and local gateway tokens are separated from upstream credentials. Full request bodies and provider keys are not logged. However, provider keys are currently accepted as command-line arguments, so shell history and process listings remain a known exposure channel. File permissions alone do not remove that risk.
+Provider files use mode `0600`, CLI output masks provider keys and the advanced sidecar `gatewayToken`, the gateway listens only on `127.0.0.1`, and local gateway tokens are separated from upstream credentials. Full request bodies and provider keys are not logged. However, provider keys are currently accepted as command-line arguments, so shell history and process listings remain a known exposure channel. File permissions alone do not remove that risk.
+
+Under the current local-machine threat model, consistency diffs may still expose `inferenceGatewayApiKey` when it is missing, or unsealed and different from the expected value. This local diagnostic behavior is retained intentionally; do not paste raw output from `profile check`, `activate`, or `gateway-run` into public locations. `profile show` redacts the advanced `gatewayToken` and every value in `inferenceCustomHeaders`.
 
 Local validation and routing failures produce explicit Anthropic-shaped errors; upstream error responses are relayed without repackaging. This release has no automatic failover, retry, or timeout policy, and no configuration backup; failures remain visible so Desktop can use its native recovery behavior.
 
 ### 5. Verification
 
-Verification covers pure functions, filesystem behavior, real-socket gateway integration, isolated installation, and macOS client integration. Tests exercise UUID indexes, atomic writes, permissions, lifecycle reconciliation, authentication, model rewriting, query preservation, JSON/SSE relay, error handling, and client cancellation. The isolated installation test uses the installed CLI to configure two providers, create and activate a profile, discover models, and forward a real HTTP request to a local fake upstream. The current suite reports 230 tests with 228 passing and two historical defensive-branch placeholders skipped; type checking completes without errors. Client integration has covered model discovery, conversation, multiple providers, workflow subagents, and haiku-tier selection, but compatibility remains tied to the tested Claude Desktop version.
+Verification covers pure functions, filesystem behavior, real-socket gateway integration, isolated installation, and macOS client integration. Tests exercise UUID indexes, atomic writes, permissions, lifecycle reconciliation, authentication, model rewriting, query preservation, JSON/SSE relay, error handling, and client cancellation. The isolated installation test uses the installed CLI to configure two providers, create and activate a profile, discover models, and forward a real HTTP request to a local fake upstream. The current suite reports 269 tests: on Windows, 260 pass with nine skipped (seven POSIX file-mode assertions skipped by platform and two historical defensive-branch placeholders), while macOS runs those seven normally; type checking completes without errors. Client integration has covered model discovery, conversation, multiple providers, workflow subagents, and haiku-tier selection, but compatibility remains tied to the tested Claude Desktop version. Windows data-root discovery, `%APPDATA%` shell detection, permission degradation, and rename retries are covered by isolated tests; the real-machine checklist is in [docs/windows-port.md](docs/windows-port.md).
 
 ### 6. Future work
 
-The design intentionally avoids automatic failover across providers. Different upstreams usually have different context caches, billing behavior, and output trajectories; switching routes can discard a long context cache and cost more than returning the native error once. Reliability work should therefore prioritize connection checks, error classification, usage reporting, and provider health visibility rather than hiding upstream failures. Credential entry could move to hidden prompts or the system keychain, while backup and official-mode restoration could make lifecycle operations easier to reverse. A future Electron UI should call `core/index.ts` rather than duplicate business logic. Windows support requires verified platform paths and credential storage, and any future protocol translation should remain a separate adapter layer outside the native Anthropic Messages path.
+The design intentionally avoids automatic failover across providers. Different upstreams usually have different context caches, billing behavior, and output trajectories; switching routes can discard a long context cache and cost more than returning the native error once. Reliability work should therefore prioritize connection checks, error classification, usage reporting, and provider health visibility rather than hiding upstream failures. Credential entry could move to hidden prompts or the system keychain, while backup and official-mode restoration could make lifecycle operations easier to reverse. A future Electron UI should call `core/index.ts` rather than duplicate business logic. Version 0.1.2 introduces a platform layer that centralizes macOS and Windows path resolution, Claude-3p data-root discovery, `--claude-root` overrides, permission degradation, and rename retries (see [docs/windows-port.md](docs/windows-port.md)); real-machine Desktop integration, ACL behavior, and antivirus coexistence on Windows still need item-by-item confirmation. Any future protocol translation should remain a separate adapter layer outside the native Anthropic Messages path.
 
 ### Appendix: installation and development
 
-Requirements: macOS, Node.js 24+, and a Claude Desktop version with third-party inference gateway support.
+Requirements: macOS or Windows, Node.js 22.18+, and a Claude Desktop version with third-party inference gateway support.
+
+There are no runtime dependencies, so `npm install` is not needed to run the CLI. Clone the repository:
 
 ```bash
 git clone https://github.com/SH082150/ClaudeHarborCLI.git
 cd ClaudeHarborCLI
-npm install
-npm link
+```
+
+Two ways to use it:
+
+```bash
+# Option 1: no installation, same command on macOS / Windows
+node bin/claudeharbor.ts --help
+node bin/claudeharbor.ts status
+
+# Option 2: install as the global `claudeharbor` command
+npm install -g .
 claudeharbor --help
 ```
 
-Quit Claude Desktop before changing profiles. After configuring providers and routes, run `claudeharbor profile check <profile>`, `claudeharbor activate <profile>`, and `claudeharbor gateway-run <profile>`. Keep the gateway terminal running while using an advanced profile. Public core APIs are exported through `core/index.ts`: `paths`, `fs`, `providers`, `profiles`, `generate`, `claudeMeta`, `check`, `validate`, `gateway`, and `usage`.
+Moving to another computer or repository directory requires no source changes: run `node bin/claudeharbor.ts` from the repository root, and data roots are derived for the current user and OS. On Windows, run `node bin/claudeharbor.ts paths` first and use `--claude-root <Claude-3p directory>` if auto-detection fails. Never commit a real `~/.claudeharbor`, Claude-3p data directory, or Usage mirror; they contain credentials, user paths, or usage records.
+
+Quit Claude Desktop before changing profiles. After configuring providers and routes, run `claudeharbor profile check <profile>`, `claudeharbor activate <profile>`, and `claudeharbor gateway-run <profile>`. Keep the gateway terminal running while using an advanced profile. On Windows, `claudeharbor paths` lists the detected Claude-3p data-root candidates, and `--claude-root <dir>` overrides auto-detection (see [docs/windows-port.md](docs/windows-port.md)). Public core APIs are exported through `core/index.ts`: `platform`, `paths`, `fs`, `providers`, `profiles`, `generate`, `claudeMeta`, `check`, `validate`, `gateway`, and `usage`.
+
+For development, run `npm ci` once to install TypeScript and type definitions; this is unnecessary when only running the CLI.
 
 ```bash
 npm test
@@ -319,6 +366,13 @@ npm run typecheck
 ```
 
 ### Changelog
+
+#### v0.1.2
+
+- Added Windows support: the platform layer now centralizes path resolution and Claude-3p data-root discovery for both platforms. The installer build uses `%LOCALAPPDATA%\Claude-3p`, the Store/MSIX build is discovered by scanning `Packages\Claude*\LocalCache\Roaming\Claude-3p`, and `%APPDATA%\Claude-3p` is treated as a candidate ranked by the presence of `configLibrary` / `local-agent-mode-sessions`.
+- Added the `claudeharbor paths` diagnostic command and the global `--claude-root <dir>` option (environment variable `CLAUDEHARBOR_CLAUDE_ROOT`) for overriding auto-detection.
+- On Windows, POSIX permission bits have no equivalent: the write layer skips `chmod` silently and secret files rely on inherited NTFS ACLs; `rename` retries briefly when antivirus or indexing services hold a target.
+- Test fixtures now derive Claude-side paths via `claudePaths()` / `officialLedgerRoot()` instead of hard-coding `Library/Application Support`. Discovery rules, permission degradation, and the real-machine verification checklist are documented in [docs/windows-port.md](docs/windows-port.md).
 
 #### v0.1.1
 

@@ -8,7 +8,7 @@
  *
  * core/index 由兄弟模块并行开发：这里惰性加载并对导出形状做适配
  * （扁平导出或 archive.<ns> 命名空间均可），缺失时报中文"集成中"。
- * --home 由入口经 env HOME 注入（core 路径表缺省 os.homedir()）。
+ * --home 由入口经 env CLAUDEHARBOR_HOME 注入（core 路径表缺省 resolveHome()，Windows 上不读 HOME）。
  */
 
 import { createInterface } from "node:readline";
@@ -16,7 +16,7 @@ import { createInterface } from "node:readline";
 import type { HarborProfile, MetaEntry, ProfilesMeta } from "../core/types.ts";
 import { maskApiKey, printTable } from "./provider.ts";
 
-/** 命令组公共选项：home 注入（由入口的全局 --home 传入，经 env HOME 生效）。 */
+/** 命令组公共选项：home 注入（由入口的全局 --home 传入，经 env CLAUDEHARBOR_HOME 生效）。 */
 export interface ProfileCommandOptions {
   readonly home?: string;
 }
@@ -249,7 +249,7 @@ function parseCreateArgs(args: readonly string[]): CreateFlags | number {
 async function cmdCreate(args: readonly string[], opts: ProfileCommandOptions): Promise<number> {
   const parsed = parseCreateArgs(args);
   if (typeof parsed === "number") return parsed;
-  void opts; // home 已由入口经 env HOME 注入
+  void opts; // home 已由入口经 env CLAUDEHARBOR_HOME 注入
 
   const ask = makePrompter();
   let port: number | undefined;
@@ -327,6 +327,15 @@ async function cmdShow(args: readonly string[], opts: ProfileCommandOptions): Pr
   const profile = structuredClone(core.profiles.get(args[0] as string)) as Record<string, unknown>;
   if (profile.mode === "advanced" && typeof profile.gatewayToken === "string") {
     profile.gatewayToken = maskApiKey(profile.gatewayToken);
+  }
+  if (typeof profile.claude === "object" && profile.claude !== null && !Array.isArray(profile.claude)) {
+    const claude = profile.claude as Record<string, unknown>;
+    const headers = claude.inferenceCustomHeaders;
+    if (typeof headers === "object" && headers !== null && !Array.isArray(headers)) {
+      claude.inferenceCustomHeaders = Object.fromEntries(
+        Object.keys(headers).map((name) => [name, "****"]),
+      );
+    }
   }
   console.log("sidecar 全文（敏感字段已打码）：");
   console.log(JSON.stringify(profile, null, 2));
@@ -464,7 +473,7 @@ async function cmdRouteAdd(args: readonly string[], opts: ProfileCommandOptions)
   }
   const tierErr = invalidTier(flags.tier);
   if (tierErr !== null) return tierErr;
-  void opts; // home 已由入口经 env HOME 注入
+  void opts; // home 已由入口经 env CLAUDEHARBOR_HOME 注入
 
   const core = await loadCore();
   const target = core.profiles.get(profile) as HarborProfile;
