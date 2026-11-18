@@ -1,0 +1,22 @@
+{
+  "name": "claudeharbor-cli",
+  "version": "0.1.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "claudeharbor": "./bin/claudeharbor.ts"
+  },
+  "description": "Manage Claude Desktop profiles and route them to any third-party model through a local gateway.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
